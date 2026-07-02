@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrafficForge · Puppeteer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+  * { font-family: 'Inter', system-ui, sans-serif; }
+  body { background: #0a0a0f; min-height: 100vh; overflow-x: hidden; }
+  #stars { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  .grid-overlay {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(139,92,246,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(139,92,246,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+  .card {
+    position: relative; z-index: 1;
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(139,92,246,0.15);
+    border-radius: 24px;
+    box-shadow: 0 0 80px rgba(139,92,246,0.06), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .card:hover { border-color: rgba(139,92,246,0.3); box-shadow: 0 0 100px rgba(139,92,246,0.1), inset 0 1px 0 rgba(255,255,255,0.08); }
+  .neon-input {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 14px; color: #fff; transition: all 0.3s; outline: none;
+  }
+  .neon-input:focus { border-color: rgba(139,92,246,0.6); box-shadow: 0 0 30px rgba(139,92,246,0.15); }
+  .neon-input::placeholder { color: rgba(255,255,255,0.2); }
+  .btn-primary {
+    background: linear-gradient(135deg, #7c3aed, #ec4899);
+    border: none; border-radius: 14px; color: #fff; font-weight: 700;
+    transition: all 0.3s;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 40px rgba(124,58,237,0.35); }
+  .select-neon {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 14px; color: rgba(255,255,255,0.7); transition: all 0.3s; cursor: pointer; outline: none;
+  }
+  .select-neon:focus { border-color: rgba(139,92,246,0.6); box-shadow: 0 0 30px rgba(139,92,246,0.1); }
+  .select-neon option { background: #1a1a2e; color: #fff; }
+  .progress-track { background: rgba(255,255,255,0.06); border-radius: 999px; height: 8px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7c3aed, #ec4899); transition: width 0.4s cubic-bezier(0.4,0,0.2,1); }
+  .log-scroll { scrollbar-width: thin; scrollbar-color: rgba(139,92,246,0.3) transparent; }
+  .log-scroll::-webkit-scrollbar { width: 4px; }
+  .log-scroll::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.3); border-radius: 999px; }
+  .badge-puppeteer {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(57, 255, 20, 0.1); border: 1px solid rgba(57, 255, 20, 0.3);
+    color: #39ff14; padding: 4px 12px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+  }
+  .fade-in { animation: fadeIn 0.4s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+<div class="grid-overlay"></div>
+
+<div class="relative z-10 flex items-center justify-center min-h-screen p-4" style="padding-top: 5vh; padding-bottom: 5vh;">
+  <div class="w-full max-w-xl">
+    <div class="text-center mb-8 fade-in">
+      <div class="inline-flex items-center gap-3 mb-3">
+        <span class="text-4xl">🔥</span>
+        <h1 class="text-4xl font-black bg-gradient-to-r from-purple-400 via-pink-400 to-orange-400 bg-clip-text text-transparent tracking-tight">TrafficForge</h1>
+      </div>
+      <div class="flex items-center justify-center gap-3 mt-2">
+        <span class="badge-puppeteer">🤖 Puppeteer</span>
+        <span class="text-xs text-gray-600">v1.0</span>
+      </div>
+    </div>
+
+    <div class="card p-8 fade-in">
+      <div id="form-area" class="space-y-5">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">目标网址</label>
+          <input id="url-input" type="url" value="https://" class="neon-input w-full px-5 py-3.5 text-base" placeholder="https://example.com">
+        </div>
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">模拟次数</label>
+            <input id="count-input" type="number" min="1" max="500" value="10" class="neon-input w-full px-5 py-3.5 text-base">
+          </div>
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">速度</label>
+            <select id="speed-select" class="select-neon w-full px-4 py-3.5 text-sm">
+              <option value="min">⚡ 闪电 1-3s</option>
+              <option value="mid" selected>🔄 正常 3-8s</option>
+              <option value="max">🐢 缓慢 8-15s</option>
+            </select>
+          </div>
+        </div>
+        <button onclick="start()" class="btn-primary w-full py-4 text-lg tracking-wide">⚡ 启动锻造炉</button>
+      </div>
+
+      <div id="run-area" class="hidden space-y-6 fade-in">
+        <div class="flex items-center gap-4">
+          <div class="w-16 h-16 rounded-full border-4 border-purple-500/30 flex items-center justify-center text-2xl font-bold text-white" id="counter-display">0</div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse" id="status-dot"></span>
+              <span class="text-sm text-gray-400 truncate" id="status-text">就绪</span>
+            </div>
+            <div class="text-xs text-gray-600 truncate" id="url-display">目标: —</div>
+          </div>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progress-bar" style="width:0%"></div></div>
+        <div class="bg-black/40 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs text-gray-600 font-mono uppercase tracking-wider">日志</span>
+            <span class="text-xs text-gray-700" id="log-count">0</span>
+          </div>
+          <div class="log-scroll h-48 overflow-y-auto space-y-1 text-xs font-mono" id="log-area">
+            <div class="text-gray-700">[system] 等待启动...</div>
+          </div>
+        </div>
+        <div class="flex gap-3">
+          <button onclick="stopTask()" id="stop-btn" class="flex-1 py-3 rounded-xl border border-red-500/30 text-red-400 bg-red-500/5 hover:bg-red-500/15 transition font-medium hidden">⏹ 停止</button>
+          <button onclick="reset()" id="reset-btn" class="flex-1 py-3 rounded-xl border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition font-medium hidden">🔄 重新配置</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-center text-gray-800 text-xs mt-6 tracking-wider">FOR EDUCATIONAL PURPOSES ONLY · RESPECT TOS</p>
+  </div>
+</div>
+
+<script>
+// ─── 星尘 ───
+(function(){
+  const c=document.getElementById('stars'),ctx=c.getContext('2d');
+  let w,h,stars=[];
+  function resize(){w=c.width=innerWidth;h=c.height=innerHeight;}
+  function init(){stars=Array.from({length:180},()=>({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.5+0.3,a:Math.random(),da:(Math.random()-0.5)*0.008,dx:(Math.random()-0.5)*0.15,dy:(Math.random()-0.5)*0.15}));}
+  function draw(){ctx.clearRect(0,0,w,h);for(const s of stars){s.x+=s.dx;s.y+=s.dy;if(s.x<0)s.x=w;if(s.x>w)s.x=0;if(s.y<0)s.y=h;if(s.y>h)s.y=0;s.a+=s.da;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(255,255,255,${Math.max(0.2,Math.min(0.9,0.5+Math.sin(s.a)*0.3))})`;ctx.fill();}requestAnimationFrame(draw);}
+  resize();init();draw();addEventListener('resize',()=>{resize();init();});
+})();
+
+let pollTimer = null;
+let running = false;
+
+function log(msg,type='info'){
+  const area=document.getElementById('log-area');
+  const colors={info:'text-gray-400',success:'text-emerald-400',warn:'text-yellow-400',error:'text-red-400'};
+  area.innerHTML+=`<div class="${colors[type]||'text-gray-400'}">[${type==='success'?'✓':type==='warn'?'⚠':type==='error'?'✗':'i'}] ${msg}</div>`;
+  area.scrollTop=area.scrollHeight;
+  document.getElementById('log-count').textContent=area.children.length+' 事件';
+}
+
+async function start(){
+  const url=document.getElementById('url-input').value.trim();
+  const count=parseInt(document.getElementById('count-input').value);
+  const speed=document.getElementById('speed-select').value;
+  if(!url||url==='https://'){log('⚠ 请输入有效网址','error');return;}
+  if(!count||count<1){log('⚠ 次数至少为1','error');return;}
+  if(count>500){log('⚠ 单次最多500次','error');return;}
+
+  document.getElementById('form-area').classList.add('hidden');
+  document.getElementById('run-area').classList.remove('hidden');
+  document.getElementById('stop-btn').classList.remove('hidden');
+  document.getElementById('url-display').textContent='目标: '+url;
+  document.getElementById('status-text').textContent='🚀 启动中...';
+  document.getElementById('log-area').innerHTML='<div class="text-gray-700">[system] 请求启动...'+(speed==='min'?'闪电':speed==='mid'?'正常':'缓慢')+'模式</div>';
+  document.getElementById('log-count').textContent='1 事件';
+  running=true;
+
+  try{
+    const res=await fetch('/api/start',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url,count,speed})
+    });
+    const data=await res.json();
+    if(data.error){log('⚠ '+data.error,'error');return;}
+    log('✅ 任务已提交: '+count+' 次','success');
+    document.getElementById('counter-display').textContent='0';
+    document.getElementById('progress-bar').style.width='0%';
+    document.getElementById('status-text').textContent='⏳ 模拟中...';
+    startPolling(count);
+  }catch(e){
+    log('💥 连接失败: '+e.message,'error');
+    document.getElementById('status-text').textContent='❌ 连接失败';
+  }
+}
+
+function startPolling(total){
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(async()=>{
+    try{
+      const res=await fetch('/api/status');
+      const data=await res.json();
+      if(data.logs){
+        for(const l of data.logs){
+          // check if already displayed (simple dedup by checking last log)
+        }
+      }
+      if(data.current!==undefined){
+        document.getElementById('counter-display').textContent=data.current;
+        document.getElementById('progress-bar').style.width=((data.current/total)*100)+'%';
+      }
+      if(!data.running){
+        clearInterval(pollTimer);
+        pollTimer=null;
+        if(data.current>=total){
+          document.getElementById('progress-bar').style.width='100%';
+          document.getElementById('counter-display').textContent=total;
+          document.getElementById('status-text').textContent='✅ 完成！';
+        } else {
+          document.getElementById('status-text').textContent='⏸ 已停止';
+        }
+        document.getElementById('stop-btn').classList.add('hidden');
+        document.getElementById('reset-btn').classList.remove('hidden');
+        running=false;
+      }
+    }catch(e){}
+  },1000);
+}
+
+async function stopTask(){
+  try{
+    await fetch('/api/stop',{method:'POST'});
+    log('⏹ 正在停止...','warn');
+    document.getElementById('status-text').textContent='⏹ 停止中...';
+  }catch(e){}
+}
+
+function reset(){
+  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+  running=false;
+  document.getElementById('run-area').classList.add('hidden');
+  document.getElementById('form-area').classList.remove('hidden');
+  document.getElementById('stop-btn').classList.add('hidden');
+  document.getElementById('reset-btn').classList.add('hidden');
+  document.getElementById('log-area').innerHTML='<div class="text-gray-700">[system] 就绪</div>';
+  document.getElementById('log-count').textContent='0';
+}
+</script>
+</body>
+</html>
