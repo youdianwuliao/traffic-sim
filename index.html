@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrafficForge · 流量锻造炉</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+  * { font-family: 'Inter', system-ui, sans-serif; }
+
+  /* ── 暗黑太空背景 ── */
+  body {
+    background: #0a0a0f;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── 星尘粒子 ── */
+  #stars-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ── 网格光效 ── */
+  .grid-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  /* ── 玻璃卡片 ── */
+  .card {
+    position: relative;
+    z-index: 1;
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(139,92,246,0.15);
+    border-radius: 24px;
+    box-shadow:
+      0 0 80px rgba(139,92,246,0.06),
+      inset 0 1px 0 rgba(255,255,255,0.06);
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .card:hover {
+    border-color: rgba(139,92,246,0.3);
+    box-shadow:
+      0 0 100px rgba(139,92,246,0.1),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+
+  /* ── 霓虹输入框 ── */
+  .neon-input {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 14px;
+    color: #fff;
+    transition: all 0.3s;
+    outline: none;
+  }
+  .neon-input:focus {
+    border-color: rgba(139,92,246,0.6);
+    box-shadow: 0 0 30px rgba(139,92,246,0.15), inset 0 0 20px rgba(139,92,246,0.04);
+  }
+  .neon-input::placeholder { color: rgba(255,255,255,0.2); }
+
+  /* ── 启动按钮 ── */
+  .btn-primary {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #7c3aed, #ec4899);
+    border: none;
+    border-radius: 14px;
+    color: #fff;
+    font-weight: 700;
+    transition: all 0.3s;
+    z-index: 1;
+  }
+  .btn-primary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, #8b5cf6, #f472b6);
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: -1;
+  }
+  .btn-primary:hover::before { opacity: 1; }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 40px rgba(124,58,237,0.35); }
+  .btn-primary:active { transform: translateY(0); }
+
+  /* ── 进度条 ── */
+  .progress-track {
+    background: rgba(255,255,255,0.06);
+    border-radius: 999px;
+    height: 8px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #7c3aed, #ec4899);
+    background-size: 200% 100%;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .progress-fill.animating { animation: shimmer 2s linear infinite; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* ── 日志区 ── */
+  .log-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139,92,246,0.3) transparent;
+  }
+  .log-scroll::-webkit-scrollbar { width: 4px; }
+  .log-scroll::-webkit-scrollbar-track { background: transparent; }
+  .log-scroll::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.3); border-radius: 999px; }
+
+  /* ── 脉冲点 ── */
+  .pulse-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #7c3aed;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(124,58,237,0.6); }
+    50% { box-shadow: 0 0 0 8px rgba(124,58,237,0); }
+  }
+
+  /* ── 计数环形动画 ── */
+  .count-ring {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, #7c3aed var(--pct), rgba(255,255,255,0.06) var(--pct));
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.4s;
+  }
+  .count-ring-inner {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: #0a0a0f;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+
+  /* ── 选择器 ── */
+  .select-neon {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 14px;
+    color: rgba(255,255,255,0.7);
+    transition: all 0.3s;
+    cursor: pointer;
+    outline: none;
+  }
+  .select-neon:focus {
+    border-color: rgba(139,92,246,0.6);
+    box-shadow: 0 0 30px rgba(139,92,246,0.1);
+  }
+  .select-neon option { background: #1a1a2e; color: #fff; }
+
+  /* ── 标签切换按钮 ── */
+  .toggle-btn {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 14px;
+    color: rgba(255,255,255,0.5);
+    transition: all 0.3s;
+    cursor: pointer;
+    outline: none;
+  }
+  .toggle-btn:hover { border-color: rgba(139,92,246,0.4); color: #fff; }
+  .toggle-btn.active { border-color: rgba(139,92,246,0.6); color: #a78bfa; background: rgba(139,92,246,0.1); }
+
+  /* ── 浮层动画 ── */
+  .fade-in { animation: fadeIn 0.4s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── iframe ── */
+  .iframe-wrap {
+    border: 1px solid rgba(139,92,246,0.15);
+    border-radius: 16px;
+    overflow: hidden;
+    background: #fff;
+  }
+</style>
+</head>
+<body>
+
+<!-- 星尘粒子 -->
+<canvas id="stars-canvas"></canvas>
+<div class="grid-overlay"></div>
+
+<div class="relative z-10 flex items-center justify-center min-h-screen p-4" style="padding-top: 5vh; padding-bottom: 5vh;">
+  <div class="w-full max-w-xl">
+
+    <!-- Header -->
+    <div class="text-center mb-8 fade-in">
+      <div class="inline-flex items-center gap-3 mb-3">
+        <span class="text-4xl">🔥</span>
+        <h1 class="text-4xl font-black bg-gradient-to-r from-purple-400 via-pink-400 to-orange-400 bg-clip-text text-transparent tracking-tight">
+          TrafficForge
+        </h1>
+      </div>
+      <p class="text-sm text-gray-500 tracking-widest uppercase">流 · 量 · 锻 · 造 · 炉</p>
+    </div>
+
+    <!-- Main Card -->
+    <div class="card p-8 fade-in">
+
+      <!-- ──── 输入区 ──── -->
+      <div id="form-area" class="space-y-5">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">目标网址</label>
+          <input id="url-input" type="url" value="https://"
+                 class="neon-input w-full px-5 py-3.5 text-base"
+                 placeholder="https://example.com">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">模拟次数</label>
+          <input id="count-input" type="number" min="1" max="500" value="10"
+                 class="neon-input w-full px-5 py-3.5 text-base">
+        </div>
+        <div class="flex gap-3">
+          <select id="delay-select" class="select-neon flex-1 px-4 py-3.5 text-sm">
+            <option value="min">⚡ 闪电 (1-3s)</option>
+            <option value="mid" selected>🔄 正常 (3-8s)</option>
+            <option value="max">🐢 缓慢 (8-15s)</option>
+          </select>
+          <button onclick="togglePreview()" id="preview-btn" class="toggle-btn px-4 py-3.5 text-sm whitespace-nowrap">
+            👁 预览
+          </button>
+        </div>
+        <button onclick="start()" class="btn-primary w-full py-4 text-lg tracking-wide">
+          ⚡ 点燃锻造炉
+        </button>
+      </div>
+
+      <!-- ──── 运行区 ──── -->
+      <div id="run-area" class="hidden space-y-6 fade-in">
+        <!-- 环形计数器 -->
+        <div class="flex items-center gap-6">
+          <div class="count-ring" id="count-ring" style="--pct:0%">
+            <div class="count-ring-inner">
+              <span class="text-2xl font-bold text-white" id="run-current">0</span>
+              <span class="text-xs text-gray-500" id="run-total">/ 0</span>
+            </div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="pulse-dot" id="status-dot"></span>
+              <span class="text-sm text-gray-400 truncate" id="status-text">就绪</span>
+            </div>
+            <div class="text-xs text-gray-600 truncate" id="url-display">目标: —</div>
+          </div>
+        </div>
+        <!-- 进度条 -->
+        <div class="progress-track">
+          <div class="progress-fill animating" id="progress-bar" style="width:0%"></div>
+        </div>
+        <!-- 日志 -->
+        <div class="bg-black/40 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs text-gray-600 font-mono uppercase tracking-wider">日志</span>
+            <span class="text-xs text-gray-700" id="log-count">0 事件</span>
+          </div>
+          <div class="log-scroll h-44 overflow-y-auto space-y-1 text-xs font-mono" id="log-area">
+            <div class="text-gray-700">[system] 炉火就绪</div>
+          </div>
+        </div>
+        <!-- 操作按钮 -->
+        <div class="flex gap-3">
+          <button onclick="stop()" id="stop-btn"
+                  class="flex-1 py-3 rounded-xl border border-red-500/30 text-red-400 bg-red-500/5 hover:bg-red-500/15 transition font-medium hidden">
+            ⏹ 熄火
+          </button>
+          <button onclick="reset()" id="reset-btn"
+                  class="flex-1 py-3 rounded-xl border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition font-medium">
+            🔄 重新配置
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Preview Panel -->
+    <div id="preview-panel" class="hidden mt-4 iframe-wrap fade-in" style="height:420px;">
+      <div class="flex items-center justify-between px-4 py-2.5 bg-black/40 border-b border-white/5">
+        <span class="text-xs text-gray-500 font-mono">📺 预览窗口</span>
+        <button onclick="togglePreview()" class="text-xs text-gray-600 hover:text-white transition">✕</button>
+      </div>
+      <iframe id="preview-iframe" class="w-full h-[calc(100%-41px)]" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+    </div>
+
+    <!-- Footer -->
+    <p class="text-center text-gray-800 text-xs mt-6 tracking-wider">
+      FOR EDUCATIONAL PURPOSES ONLY · RESPECT TOS
+    </p>
+
+  </div>
+</div>
+
+<script>
+// ─── 星尘粒子 ───
+(function() {
+  const c = document.getElementById('stars-canvas');
+  const ctx = c.getContext('2d');
+  let w, h, stars = [];
+
+  function resize() { w = c.width = innerWidth; h = c.height = innerHeight; }
+  function initStars() {
+    stars = Array.from({length: 180}, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      r: Math.random() * 1.5 + 0.3,
+      a: Math.random(), da: (Math.random() - 0.5) * 0.008,
+      dx: (Math.random() - 0.5) * 0.15,
+      dy: (Math.random() - 0.5) * 0.15,
+    }));
+  }
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+    for (const s of stars) {
+      s.x += s.dx; s.y += s.dy;
+      if (s.x < 0) s.x = w; if (s.x > w) s.x = 0;
+      if (s.y < 0) s.y = h; if (s.y > h) s.y = 0;
+      s.a += s.da;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${Math.max(0.2, Math.min(0.9, 0.5 + Math.sin(s.a) * 0.3))})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  resize(); initStars(); draw();
+  addEventListener('resize', () => { resize(); initStars(); });
+})();
+
+// ─── 核心逻辑 ───
+let running = false, stopped = false;
+let current = 0, total = 0;
+let previewVisible = false;
+let logEvents = 0;
+
+const UA_POOL = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/127.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/537.36 Chrome/127.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Safari/604.1',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/127.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+  'Mozilla/5.0 (iPad; CPU OS 17_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+];
+
+const VP = [
+  [1366,768],[1440,900],[1536,864],[1920,1080],[1280,720],[1600,900],[1680,1050],
+];
+
+function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function getDelayMs() {
+  const s = document.getElementById('delay-select').value;
+  return s === 'min' ? rand(1000, 3000) : s === 'mid' ? rand(3000, 8000) : rand(8000, 15000);
+}
+
+function log(msg, type = 'info') {
+  const area = document.getElementById('log-area');
+  const colors = {info:'text-gray-400', success:'text-emerald-400', warn:'text-yellow-400', error:'text-red-400', visit:'text-purple-300'};
+  const icons = {info:'i', success:'✓', warn:'⚠', error:'✗', visit:'→'};
+  area.innerHTML += `<div class="${colors[type] || 'text-gray-400'}">[${icons[type]}] ${msg}</div>`;
+  area.scrollTop = area.scrollHeight;
+  logEvents++;
+  document.getElementById('log-count').textContent = logEvents + ' 事件';
+}
+
+function togglePreview() {
+  previewVisible = !previewVisible;
+  document.getElementById('preview-panel').classList.toggle('hidden', !previewVisible);
+  document.getElementById('preview-btn').classList.toggle('active', previewVisible);
+}
+
+async function visit(url, i) {
+  if (stopped) return false;
+
+  const [vw, vh] = VP[rand(0, VP.length - 1)];
+  const ua = UA_POOL[rand(0, UA_POOL.length - 1)];
+  const waitMs = getDelayMs();
+  const shortUA = ua.match(/Chrome\/[\d.]+|Firefox\/[\d.]+|Safari\/[\d.]+|Mobile\/[\d\w]+/)?.[0] || 'UA';
+
+  document.getElementById('status-text').textContent = `⚡ ${i}/${total} · 等待 ${(waitMs/1000).toFixed(0)}s`;
+  log(`等待 ${(waitMs/1000).toFixed(1)}s · ${vw}×${vh} · ${shortUA}`, 'info');
+  await delay(waitMs);
+  if (stopped) return false;
+
+  document.getElementById('status-text').textContent = `🔥 ${i}/${total} · 正在加载`;
+  log(`访问 → ${url}`, 'visit');
+
+  if (previewVisible) {
+    document.getElementById('preview-iframe').src = url;
+  }
+
+  // Fire beacon
+  try {
+    const img = new Image();
+    img.src = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now() + '_r=' + Math.random();
+    setTimeout(() => { img.src = ''; }, 5000);
+  } catch(e) {}
+
+  // Simulate reading time
+  const readSec = rand(2, 7);
+  await delay(readSec * 1000);
+  if (stopped) return false;
+
+  log(`#${i} 完成 (停留 ${readSec}s)`, 'success');
+  return true;
+}
+
+async function start() {
+  const url = document.getElementById('url-input').value.trim();
+  const count = parseInt(document.getElementById('count-input').value);
+
+  if (!url || url === 'https://') { log('⚠ 请输入有效网址', 'error'); return; }
+  if (!count || count < 1) { log('⚠ 次数至少为 1', 'error'); return; }
+  if (count > 500) { log('⚠ 单次最多 500 次', 'error'); return; }
+
+  running = true; stopped = false; current = 0; total = count; logEvents = 0;
+
+  document.getElementById('form-area').classList.add('hidden');
+  document.getElementById('run-area').classList.remove('hidden');
+  document.getElementById('stop-btn').classList.remove('hidden');
+  document.getElementById('status-text').textContent = '🔄 点燃中...';
+  document.getElementById('url-display').textContent = `目标: ${url}`;
+  document.getElementById('run-total').textContent = `/ ${count}`;
+  document.getElementById('run-current').textContent = '0';
+  document.getElementById('progress-bar').style.width = '0%';
+  document.getElementById('count-ring').style.setProperty('--pct', '0%');
+  document.getElementById('log-area').innerHTML = `<div class="text-gray-700">[system] 锻造启动 · ${count} 次访问</div>`;
+  document.getElementById('log-count').textContent = '1 事件';
+  document.getElementById('reset-btn').classList.add('hidden');
+
+  log(`目标: ${url}`, 'info');
+  log(`次数: ${count}`, 'info');
+
+  for (let i = 1; i <= count && !stopped; i++) {
+    current = i;
+    const pct = (i / count) * 100;
+    document.getElementById('run-current').textContent = i;
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('count-ring').style.setProperty('--pct', pct + '%');
+    await visit(url, i);
+  }
+
+  if (stopped) {
+    document.getElementById('status-text').textContent = '⏸ 已熄火';
+    log('⏸ 手动停止', 'warn');
+  } else {
+    document.getElementById('progress-bar').style.width = '100%';
+    document.getElementById('count-ring').style.setProperty('--pct', '100%');
+    document.getElementById('status-text').textContent = '✅ 锻造完成！';
+    log('🎉 全部完成！', 'success');
+  }
+
+  running = false;
+  document.getElementById('stop-btn').classList.add('hidden');
+  document.getElementById('reset-btn').classList.remove('hidden');
+}
+
+function stop() { stopped = true; log('正在熄火...', 'warn'); }
+
+function reset() {
+  stopped = true; running = false;
+  document.getElementById('run-area').classList.add('hidden');
+  document.getElementById('form-area').classList.remove('hidden');
+  document.getElementById('stop-btn').classList.add('hidden');
+  document.getElementById('preview-panel').classList.add('hidden');
+  previewVisible = false;
+  document.getElementById('preview-btn').classList.remove('active');
+  document.getElementById('log-area').innerHTML = `<div class="text-gray-700">[system] 炉火就绪</div>`;
+  document.getElementById('log-count').textContent = '0 事件';
+}
+</script>
+</body>
+</html>
