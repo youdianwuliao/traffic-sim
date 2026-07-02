@@ -1,0 +1,15 @@
+{
+  "name": "traffic-forge",
+  "version": "1.0.0",
+  "description": "🔥 TrafficForge — Puppeteer 后端版，真实 headless 浏览器模拟访问",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "puppeteer": "^23.0.0",
+    "cors": "^2.8.5"
+  }
+}
